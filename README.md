@@ -26,6 +26,12 @@ More samples live in [skills/edu-solid-geometry/output/](skills/edu-solid-geomet
 npx skills add wy51ai/edulab
 ```
 
+To update to the latest version later:
+
+```bash
+npx skills update
+```
+
 Or use it as a Claude Code plugin marketplace:
 
 ```

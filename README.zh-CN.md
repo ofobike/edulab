@@ -26,6 +26,12 @@ edulab 是一个 [Claude Code](https://claude.com/claude-code) 插件（plugin +
 npx skills add wy51ai/edulab
 ```
 
+后续更新到最新版：
+
+```bash
+npx skills update
+```
+
 或作为 Claude Code 插件市场使用：
 
 ```
