@@ -23,8 +23,14 @@ More samples live in [skills/edu-solid-geometry/output/](skills/edu-solid-geomet
 Use it as a Claude Code plugin marketplace:
 
 ```
-/plugin marketplace add <repo URL or local path>
+/plugin marketplace add wy51ai/edulab
 /plugin install edulab
+```
+
+Or install the package from npm:
+
+```bash
+npm install @wy51ai/edulab
 ```
 
 Once installed, the skill activates on its trigger words, and other agents can also invoke it to generate these pages.
