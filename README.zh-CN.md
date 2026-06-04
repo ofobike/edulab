@@ -20,17 +20,17 @@ edulab 是一个 [Claude Code](https://claude.com/claude-code) 插件（plugin +
 
 ## 安装
 
-作为 Claude Code 插件市场使用：
+**推荐** —— 用 [skills](https://github.com/vercel-labs/skills) 一行命令安装：
+
+```bash
+npx skills add wy51ai/edulab
+```
+
+或作为 Claude Code 插件市场使用：
 
 ```
 /plugin marketplace add wy51ai/edulab
 /plugin install edulab
-```
-
-或从 npm 安装：
-
-```bash
-npm install @wy51ai/edulab
 ```
 
 安装后，技能会随触发词自动激活，也可被其他 agent 调用来生成这类网页。

@@ -20,17 +20,17 @@ More samples live in [skills/edu-solid-geometry/output/](skills/edu-solid-geomet
 
 ## Install
 
-Use it as a Claude Code plugin marketplace:
+**Recommended** — install with [skills](https://github.com/vercel-labs/skills) in one command:
+
+```bash
+npx skills add wy51ai/edulab
+```
+
+Or use it as a Claude Code plugin marketplace:
 
 ```
 /plugin marketplace add wy51ai/edulab
 /plugin install edulab
-```
-
-Or install the package from npm:
-
-```bash
-npm install @wy51ai/edulab
 ```
 
 Once installed, the skill activates on its trigger words, and other agents can also invoke it to generate these pages.
