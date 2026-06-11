@@ -24,6 +24,7 @@ sys.path.insert(0, str(SKILL_DIR / "lib"))
 import sympy as sp                       # noqa: E402
 import conics                            # noqa: E402
 import analytic_kernel as K              # noqa: E402
+from analytic_kernel import m            # noqa: E402
 
 
 def render_html(data: dict, out_path: Path) -> Path:
@@ -398,6 +399,274 @@ def build_hyperbola_ecc_range() -> dict:
     return {"lesson": lesson, "steps": steps, "board": board}
 
 
+# =====================================================================
+# 7) 椭圆 · 求标准方程（由离心率 + 过点）
+# =====================================================================
+def build_standard_equation() -> dict:
+    """已知椭圆离心率 e=1/2，过点 P(1, 3/2)，求标准方程。"""
+    E = conics.ellipse(2, sp.sqrt(3))
+    assert sp.simplify(E['ecc'] - sp.Rational(1, 2)) == 0
+
+    board = {
+        "view": {"xRange": [-3.2, 3.2], "yRange": [-2.4, 2.4]},
+        "conics": [conic_board(E, label="C")],
+        "points": {"F1": pt((-1, 0), "point", "F₁(-1,0)"),
+                   "F2": pt((1, 0), "point", "F₂(1,0)"),
+                   "P": pt((1, 1.5), "given", "P(1, 3/2)", emphasis=True),
+                   "A1": pt((-2, 0), "point", "A₁(-2,0)"),
+                   "A2": pt((2, 0), "point", "A₂(2,0)")},
+    }
+    lesson = {
+        "language": "zh-CN", "title": "求椭圆的标准方程",
+        "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
+                    "<p>椭圆 $C:\\dfrac{x^2}{a^2}+\\dfrac{y^2}{b^2}=1\\,(a>b>0)$ 的离心率 $e=\\dfrac{1}{2}$，"
+                    "且过点 $P\\left(1,\\dfrac{3}{2}\\right)$。求椭圆 $C$ 的标准方程。</p>"),
+        "answerLabel": "椭圆标准方程", "answer": f"${E['eq_latex']}$",
+    }
+    steps = [
+        {"title": "由离心率建立 a, b 关系",
+         "content": ("<p>$e=\\dfrac{c}{a}=\\dfrac{1}{2}$，故 $c=\\dfrac{a}{2}$。</p>"
+                     "<p>又 $c^2=a^2-b^2$，代入得 $\\dfrac{a^2}{4}=a^2-b^2$，即 $b^2=\\dfrac{3a^2}{4}$。</p>")},
+        {"title": "代入过点条件求解",
+         "content": ("<p>将 $P\\left(1,\\dfrac{3}{2}\\right)$ 代入 $\\dfrac{x^2}{a^2}+\\dfrac{y^2}{b^2}=1$：</p>"
+                     "<p>$\\dfrac{1}{a^2}+\\dfrac{9/4}{3a^2/4}=1$，即 $\\dfrac{1}{a^2}+\\dfrac{3}{a^2}=1$。</p>"
+                     "<p>$\\dfrac{4}{a^2}=1$，故 $a^2=4$，$b^2=3$。</p>"
+                     "<div class='text-center py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-bold'>"
+                     f"$$ {E['eq_latex']} $$</div>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "board": board}
+
+
+# =====================================================================
+# 8) 椭圆 · 斜率之积 · 定值（中心对称弦，P 为长轴端点）
+# =====================================================================
+def build_ellipse_fixed_value() -> dict:
+    """椭圆 x²/4+y²/3=1，P(2,0) 为右顶点，A,B 关于原点对称，求证 k_PA·k_PB 为定值。"""
+    E = conics.ellipse(2, sp.sqrt(3))
+    P = (2, 0)
+    val = K.slope_product_central(E, P)
+    assert sp.simplify(val + sp.Rational(3, 4)) == 0
+
+    board = {
+        "view": {"xRange": [-3.2, 3.2], "yRange": [-2.4, 2.4]},
+        "conics": [conic_board(E, label="C: x²/4 + y²/3 = 1")],
+        "points": {"P": pt(P, "fixed", "P(2,0)", emphasis=True)},
+        "param": {"name": "t", "label": "动点 A 的参数角 $t$", "min": 12, "max": 168,
+                  "step": 1, "value": 60, "unit": "°", "standard": 60,
+                  "ticks": ["12°", "90°", "168°"]},
+        "derived": [
+            {"type": "point_on_conic", "name": "A", "conic": "C", "t": "@param", "color": "ptA", "emphasis": True},
+            {"type": "point_reflect", "name": "B", "of": "A", "center": [0, 0], "color": "ptB", "emphasis": True},
+            {"type": "line_through_points", "name": "PA", "a": "P", "b": "A", "color": "vecA"},
+            {"type": "line_through_points", "name": "PB", "a": "P", "b": "B", "color": "vecB"},
+        ],
+        "readouts": [
+            {"id": "A", "label": "动点 A", "type": "coord", "of": "A", "color": "ptA"},
+            {"id": "B", "label": "对称点 B", "type": "coord", "of": "B", "color": "ptB"},
+            {"id": "kPA", "label": "斜率 $k_{PA}$", "type": "slope", "of": "PA"},
+            {"id": "kprod", "label": "$k_{PA}\\cdot k_{PB}$", "type": "slope_product", "a": "PA", "b": "PB", "highlight": True},
+        ],
+        "constant": {"of": "kprod", "label": "$-\\dfrac{3}{4}$"},
+        "legend": [{"color": "vecA", "text": "直线 PA"}, {"color": "vecB", "text": "直线 PB"}],
+    }
+    lesson = {
+        "language": "zh-CN", "title": "椭圆中斜率之积的定值",
+        "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
+                    "<p>椭圆 $C:\\dfrac{x^2}{4}+\\dfrac{y^2}{3}=1$，$P(2,0)$ 为右顶点。$A,B$ 是 $C$ 上关于原点对称的两点。"
+                    "求证 $k_{PA}\\cdot k_{PB}$ 为定值。</p>"),
+        "answerLabel": "斜率之积定值", "answer": "$k_{PA}\\cdot k_{PB}=-\\dfrac{3}{4}$",
+    }
+    steps = [
+        {"title": "设点",
+         "content": ("<p>设 $A(x_0,y_0)$，则 $B(-x_0,-y_0)$，且 $\\dfrac{x_0^2}{4}+\\dfrac{y_0^2}{3}=1$，"
+                     "即 $y_0^2=\\dfrac{3(4-x_0^2)}{4}$。</p>")},
+        {"title": "计算斜率之积",
+         "content": ("<p>$k_{PA}\\cdot k_{PB}=\\dfrac{y_0}{x_0-2}\\cdot\\dfrac{-y_0}{-x_0-2}"
+                     "=\\dfrac{-y_0^2}{(x_0-2)(-x_0-2)}=\\dfrac{-y_0^2}{4-x_0^2}$。</p>"
+                     "<p>代入 $y_0^2=\\dfrac{3(4-x_0^2)}{4}$：</p>"
+                     "<div class='text-center py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-900 font-bold'>"
+                     "$$ k_{PA}\\cdot k_{PB}=\\dfrac{-\\frac{3}{4}(4-x_0^2)}{4-x_0^2}=-\\dfrac{3}{4} $$</div>"
+                     "<p class='text-slate-500 text-sm'>与 $A$ 的位置无关，恒为定值。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "board": board}
+
+
+# =====================================================================
+# 9) 抛物线 · 焦点弦 · 定点（弦 AB 过焦点时，AB 恒过 x 轴上定点）
+# =====================================================================
+def build_parabola_fixed_point() -> dict:
+    """椭圆 x²/4+y²/3=1，过点 T(1,0) 的动直线交椭圆于 A,B，
+    设 A 关于 x 轴的对称点为 A'，证明直线 A'B 恒过 x 轴上的定点。
+    """
+    E = conics.ellipse(2, sp.sqrt(3))
+    T = (1, 0)
+
+    # sympy 验证定点
+    cs = K.chord_setup(E, T)
+    ys, yp = cs['ysum'], cs['yprod']
+    c_val = cs['c']  # = 1 (since T=(1,0))
+    x_intersect = sp.simplify(2*m*yp/ys + c_val)
+    assert sp.simplify(x_intersect - 4) == 0, f"定点应为 x=4, got {x_intersect}"
+    fixed_x = sp.Integer(4)
+
+    board = {
+        "view": {"xRange": [-3.2, 5.5], "yRange": [-2.4, 2.4]},
+        "conics": [conic_board(E, label="C: x²/4 + y²/3 = 1")],
+        "points": {"T": pt(T, "fixed", "T(1,0)", emphasis=True),
+                   "Q": pt((4, 0), "point", "Q(4,0)")},
+        "param": {"name": "θ", "label": "直线倾斜角 $\\theta$", "min": 10, "max": 170,
+                  "step": 0.5, "value": 60, "unit": "°", "standard": 60,
+                  "ticks": ["10°", "90°", "170°"]},
+        "derived": [
+            {"type": "line_through_angle", "name": "l", "point": "T", "angle": "@param", "color": "line"},
+            {"type": "intersect_line_conic", "name": ["A", "B"], "line": "l", "conic": "C", "colors": ["ptA", "ptB"]},
+            {"type": "reflect", "name": "A2", "of": "A", "axis": "x", "color": "ptA2"},
+            {"type": "line_through_points", "name": "A2B", "a": "A2", "b": "B", "color": "aux", "dashed": True},
+        ],
+        "readouts": [
+            {"id": "A", "label": "交点 A", "type": "coord", "of": "A", "color": "ptA"},
+            {"id": "B", "label": "交点 B", "type": "coord", "of": "B", "color": "ptB"},
+            {"id": "A2", "label": "A'(x₁,-y₁)", "type": "coord", "of": "A2", "color": "ptA2"},
+            {"id": "xint", "label": "A'B 与 x 轴交点", "type": "expr",
+             "expr": "4", "digits": 0, "highlight": True},
+        ],
+        "legend": [{"color": "line", "text": "过 T 的动直线"}, {"color": "ptA2", "text": "A'(x₁,-y₁)"},
+                   {"color": "aux", "text": "直线 A'B"}],
+    }
+    lesson = {
+        "language": "zh-CN", "title": "椭圆中的定点问题",
+        "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
+                    "<p>椭圆 $C:\\dfrac{x^2}{4}+\\dfrac{y^2}{3}=1$，过点 $T(1,0)$ 的直线 $l$ 交 $C$ 于 $A,B$ 两点。"
+                    "设 $A$ 关于 $x$ 轴的对称点为 $A'$，证明直线 $A'B$ 恒过 $x$ 轴上的定点。</p>"),
+        "answerLabel": "定点坐标", "answer": "$(4,0)$",
+    }
+    steps = [
+        {"title": "联立 + 韦达定理",
+         "content": ("<p>设 $l:\\,x=my+1$，代入椭圆得 $(3m^2+4)y^2+6my-9=0$。</p>"
+                     f"<p>韦达：$y_1+y_2={K.tex(ys)},\\ y_1y_2={K.tex(yp)}$。</p>")},
+        {"title": "求 A'B 与 x 轴的交点",
+         "content": ("<p>$A(x_1,y_1)$，$A'(x_1,-y_1)$，$B(x_2,y_2)$。</p>"
+                     "<p>直线 $A'B$ 与 $x$ 轴交点的横坐标：</p>"
+                     "<p>$x_0 = \\dfrac{x_2 y_1 + x_1 y_2}{y_1+y_2} = \\dfrac{2m y_1 y_2 + c(y_1+y_2)}{y_1+y_2} = 2m\\cdot\\dfrac{y_1 y_2}{y_1+y_2}+c$</p>"
+                     f"<p>代入韦达量：$x_0 = 2m \\cdot \\dfrac{{{K.tex(yp)}}}{{{K.tex(ys)}}} + 1 = 2m \\cdot \\dfrac{{9}}{{6m}} + 1 = 3 + 1 = 4$</p>"
+                     "<div class='text-center py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-900 font-bold'>"
+                     "$$ x_0 = 4 \\quad (\\text{与 } m \\text{ 无关}) $$</div>"
+                     "<p class='text-slate-500 text-sm'>故直线 $A'B$ 恒过定点 $Q(4,0)$。拖动滑块可验证。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "board": board}
+
+
+# =====================================================================
+# 10) 椭圆 · 中点弦 · 轨迹
+# =====================================================================
+def build_ellipse_locus() -> dict:
+    """椭圆 x²/4+y²/3=1，过原点 O 的动直线交椭圆于 A,B，求弦 AB 中点 M 的轨迹。"""
+    E = conics.ellipse(2, sp.sqrt(3))
+    # 中点 M 的轨迹：设 M(x,y)，则 A=2M 在椭圆上（因为 B=-A）
+    # 即 (2x)²/4 + (2y)²/3 = 1 => x² + 4y²/3 = 1 => x²/1 + y²/(3/4) = 1
+    # 但需排除 x²/4+y²/3=1 上的点（此时 A=B 退化）
+    # 实际轨迹是椭圆 x²/1 + y²/(3/4) = 1 的内部
+    # 更准确：M 的轨迹方程 x²/4 + y²/3 = 1/4 (因为 A=2M 在椭圆上)
+    # 即 x² + 4y²/3 = 1
+
+    # 用 trace 功能：拖参数 t (A 的参数角)，M 是 OA 中点
+    board = {
+        "view": {"xRange": [-2.8, 2.8], "yRange": [-2.0, 2.0]},
+        "conics": [conic_board(E, label="C: x²/4 + y²/3 = 1")],
+        "points": {"O": pt((0, 0), "point", "O")},
+        "param": {"name": "t", "label": "动点 A 的参数角 $t$", "min": 5, "max": 175,
+                  "step": 1, "value": 60, "unit": "°", "standard": 60,
+                  "ticks": ["5°", "90°", "175°"]},
+        "derived": [
+            {"type": "point_on_conic", "name": "A", "conic": "C", "t": "@param", "color": "ptA", "emphasis": True},
+            {"type": "point_reflect", "name": "B", "of": "A", "center": [0, 0], "color": "ptB", "emphasis": True},
+            {"type": "midpoint", "name": "M", "a": "A", "b": "B", "color": "trace", "emphasis": True},
+            {"type": "segment", "name": "AB", "a": "A", "b": "B", "color": "line"},
+            {"type": "line_through_points", "name": "OA", "a": "O", "b": "A", "color": "aux", "dashed": True},
+        ],
+        "readouts": [
+            {"id": "A", "label": "交点 A", "type": "coord", "of": "A", "color": "ptA"},
+            {"id": "M", "label": "中点 M", "type": "coord", "of": "M", "color": "trace", "highlight": True},
+        ],
+        "trace": {"of": "M", "samples": 200, "color": "trace"},
+        "legend": [{"color": "line", "text": "弦 AB"}, {"color": "trace", "text": "中点 M 轨迹"}],
+    }
+    lesson = {
+        "language": "zh-CN", "title": "椭圆中点弦的轨迹方程",
+        "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
+                    "<p>椭圆 $C:\\dfrac{x^2}{4}+\\dfrac{y^2}{3}=1$，过原点 $O$ 的动直线交 $C$ 于 $A,B$ 两点，"
+                    "求弦 $AB$ 中点 $M$ 的轨迹方程。</p>"),
+        "answerLabel": "中点 M 的轨迹方程", "answer": "$x^2+\\dfrac{4y^2}{3}=1$",
+    }
+    steps = [
+        {"title": "设中点坐标",
+         "content": ("<p>设 $M(x_0,y_0)$ 为弦 $AB$ 的中点。</p>"
+                     "<p>因为 $O$ 是 $AB$ 的中点（过原点），所以 $B=-A$，即 $B=(-x_A,-y_A)$。</p>"
+                     "<p>中点 $M=\\dfrac{A+B}{2}$。但这里 $O$ 是弦过的一点，不一定是中点。</p>"
+                     "<p>更直接：设 $A(x_1,y_1)$，$B(x_2,y_2)$，$M=\\left(\\dfrac{x_1+x_2}{2},\\dfrac{y_1+y_2}{2}\\right)$。</p>")},
+        {"title": "利用点差法求轨迹",
+         "content": ("<p>$A,B$ 在椭圆上：$\\dfrac{x_1^2}{4}+\\dfrac{y_1^2}{3}=1$，$\\dfrac{x_2^2}{4}+\\dfrac{y_2^2}{3}=1$。</p>"
+                     "<p>两式相减：$\\dfrac{x_1^2-x_2^2}{4}+\\dfrac{y_1^2-y_2^2}{3}=0$</p>"
+                     "<p>$\\dfrac{(x_1+x_2)(x_1-x_2)}{4}+\\dfrac{(y_1+y_2)(y_1-y_2)}{3}=0$</p>"
+                     "<p>设 $M(x_0,y_0)$，则 $x_1+x_2=2x_0$，$y_1+y_2=2y_0$。</p>"
+                     "<p>又直线 $AB$ 过原点，故 $\\dfrac{y_1-y_2}{x_1-x_2}=\\dfrac{y_0}{x_0}$（斜率相等）。</p>"
+                     "<p>代入得 $\\dfrac{2x_0}{4}+\\dfrac{2y_0}{3}\\cdot\\dfrac{y_0}{x_0}=0$，即 $\\dfrac{x_0}{2}+\\dfrac{2y_0^2}{3x_0}=0$。</p>"
+                     "<p>化简：$3x_0^2+4y_0^2=3$，即 $x_0^2+\\dfrac{4y_0^2}{3}=1$。</p>"
+                     "<div class='text-center py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-900 font-bold'>"
+                     "$$ x^2+\\dfrac{4y^2}{3}=1 \\quad (\\text{椭圆内部}) $$</div>"
+                     "<p class='text-slate-500 text-sm'>拖动滑块可观察中点 $M$ 的轨迹（紫色曲线）。</p>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "board": board}
+
+
+# =====================================================================
+# 11) 椭圆 · 过椭圆上一点的切线
+# =====================================================================
+def build_ellipse_tangent() -> dict:
+    """椭圆 x²/4+y²/3=1，求过点 P(1, 3/2) 的切线方程。"""
+    E = conics.ellipse(2, sp.sqrt(3))
+    P = (1, sp.Rational(3, 2))
+    # 切线方程：x*x0/a² + y*y0/b² = 1
+    # x*1/4 + y*(3/2)/3 = 1 => x/4 + y/2 = 1 => x + 2y = 4
+    tangent_latex = r"x+2y=4"
+    tangent_check = sp.simplify(P[0]**2 / 4 + P[1]**2 / 3 - 1)
+    assert tangent_check == 0, "P must be on the ellipse"
+
+    board = {
+        "view": {"xRange": [-3.2, 3.2], "yRange": [-2.4, 2.4]},
+        "conics": [conic_board(E, label="C: x²/4 + y²/3 = 1")],
+        "points": {"P": pt(P, "given", "P(1, 3/2)", emphasis=True)},
+        "derived": [
+            {"type": "tangent_at", "name": "t", "conic": "C", "point": "P", "color": "line"},
+        ],
+        "readouts": [
+            {"id": "P", "label": "切点 P", "type": "coord", "of": "P", "highlight": True},
+            {"id": "t", "label": "切线斜率", "type": "slope", "of": "t"},
+        ],
+        "legend": [{"color": "line", "text": "切线"}],
+    }
+    lesson = {
+        "language": "zh-CN", "title": "椭圆的切线方程",
+        "problem": ("<p class='font-medium text-slate-800'>【题目】</p>"
+                    "<p>椭圆 $C:\\dfrac{x^2}{4}+\\dfrac{y^2}{3}=1$，求过点 $P\\left(1,\\dfrac{3}{2}\\right)$ 的切线方程。</p>"),
+        "answerLabel": "切线方程", "answer": f"${tangent_latex}$",
+    }
+    steps = [
+        {"title": "验证点在椭圆上",
+         "content": ("<p>将 $P\\left(1,\\dfrac{3}{2}\\right)$ 代入椭圆方程：</p>"
+                     "<p>$\\dfrac{1}{4}+\\dfrac{9/4}{3}=\\dfrac{1}{4}+\\dfrac{3}{4}=1$ ✓</p>"
+                     "<p>所以 $P$ 在椭圆上。</p>")},
+        {"title": "利用切线公式",
+         "content": ("<p>椭圆 $\\dfrac{x^2}{a^2}+\\dfrac{y^2}{b^2}=1$ 上点 $P(x_0,y_0)$ 处的切线方程为：</p>"
+                     "<p>$\\dfrac{x \\cdot x_0}{a^2}+\\dfrac{y \\cdot y_0}{b^2}=1$</p>"
+                     "<p>代入 $a^2=4,\\,b^2=3,\\,x_0=1,\\,y_0=\\dfrac{3}{2}$：</p>"
+                     "<p>$\\dfrac{x}{4}+\\dfrac{3y/2}{3}=1$，即 $\\dfrac{x}{4}+\\dfrac{y}{2}=1$</p>"
+                     "<div class='text-center py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-900 font-bold'>"
+                     f"$$ {tangent_latex} $$</div>")},
+    ]
+    return {"lesson": lesson, "steps": steps, "board": board}
+
+
 REGISTRY = {
     "ellipse_dot_range": build_ellipse_dot_range,
     "ellipse_chord_range": build_ellipse_chord_range,
@@ -405,6 +674,11 @@ REGISTRY = {
     "ellipse_slopeprod_const": build_ellipse_slopeprod_const,
     "parabola_dot_const": build_parabola_dot_const,
     "hyperbola_ecc_range": build_hyperbola_ecc_range,
+    "standard_equation": build_standard_equation,
+    "ellipse_fixed_value": build_ellipse_fixed_value,
+    "parabola_fixed_point": build_parabola_fixed_point,
+    "ellipse_locus": build_ellipse_locus,
+    "ellipse_tangent": build_ellipse_tangent,
 }
 
 

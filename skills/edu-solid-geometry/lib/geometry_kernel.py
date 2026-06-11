@@ -264,6 +264,174 @@ def solve_cube_line_plane_angle(edge=1, scale=2):
     }
 
 
+# ===================== 具体题目求解（新增 5 题型） =====================
+
+def regular_tri_pyramid(base_edge, height):
+    """正三棱锥 P-ABC：底面正三角形 ABC 中心 O 为原点，BC 在 x 轴上，P 在 z 轴上。
+
+    返回 {name: sympy 列向量}（数学坐标）。
+    """
+    a = sp.sympify(base_edge)
+    h = sp.sympify(height)
+    # 正三角形边长 a，外接圆半径 R = a/√3，内切圆半径 r = a/(2√3)
+    R = a / sqrt(3)
+    r = a / (2 * sqrt(3))
+    return {
+        "O": V(0, 0, 0),
+        "A": V(0, R, 0),
+        "B": V(-a / 2, -r, 0),
+        "C": V(a / 2, -r, 0),
+        "P": V(0, 0, h),
+    }
+
+
+def solve_cube_skew_lines_angle(edge=1, scale=2):
+    """正方体 ABCD-A1B1C1D1（棱长 a），求异面直线 A1C 与 AD 所成角的余弦值。
+
+    A1C 是体对角线，AD 是侧棱，二者为异面直线。
+    cosθ = |A1C·AD| / (|A1C|·|AD|) = |0·0+1·1+(-1)·0| / (√3·1) = 1/√3 = √3/3。
+    """
+    pts = cube(edge)
+    d1 = pts["C"] - pts["A1"]  # A1C 方向 = (1,1,-1)
+    d2 = pts["D"] - pts["A"]   # AD 方向  = (0,1,0)
+    cos_theta = line_line_angle_cos(d1, d2)
+
+    d1_simpl = simplify_vec(d1)
+    d2_simpl = simplify_vec(d2)
+
+    return {
+        "answer_latex": tex(cos_theta),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "A1C": tex_vec(d1),
+            "AD": tex_vec(d2),
+            "A1C_simpl": tex_vec(d1_simpl),
+            "AD_simpl": tex_vec(d2_simpl),
+            "dot": tex(sp.Abs(d1.dot(d2))),
+            "norm_A1C": tex(sp.simplify(d1.norm())),
+            "norm_AD": tex(sp.simplify(d2.norm())),
+            "cos": tex(cos_theta),
+        },
+        "_exact": {"cos_theta": cos_theta},
+    }
+
+
+def solve_pyramid_dihedral(base_edge=2, height=2, scale=1.5):
+    """正四棱锥 P-ABCD，求侧面 PAB 与侧面 PBC 所成二面角的余弦值。
+
+    二面角沿公共棱 PB。
+    """
+    pts = regular_quad_pyramid(base_edge, height)
+    P, A, B, C = pts["P"], pts["A"], pts["B"], pts["C"]
+
+    cos_val = dihedral_cos(B, P, A, C)  # 二面角 A-PB-C
+
+    n1 = normal_from_points(P, A, B)  # 面 PAB
+    n2 = normal_from_points(P, B, C)  # 面 PBC
+    n1_s = simplify_vec(n1)
+    n2_s = simplify_vec(n2)
+
+    diag_tex = tex(sp.sympify(base_edge) * sqrt(2))
+
+    return {
+        "answer_latex": tex(cos_val),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "PB": tex_vec(P - B),
+            "n1": tex_vec(n1),
+            "n2": tex_vec(n2),
+            "n1_simpl": tex_vec(n1_s),
+            "n2_simpl": tex_vec(n2_s),
+            "cos": tex(cos_val),
+            "diag": diag_tex,
+        },
+        "_exact": {"cos_theta": cos_val},
+    }
+
+
+def solve_cube_point_plane_distance(edge=1, scale=2):
+    """正方体 ABCD-A1B1C1D1（棱长 a），求顶点 A1 到对角面 BDC1 的距离。"""
+    pts = cube(edge)
+    A1 = pts["A1"]
+    B, D, C1 = pts["B"], pts["D"], pts["C1"]
+    n = normal_from_points(B, D, C1)
+    n_simpl = simplify_vec(n)
+    dist = point_plane_distance(A1, B, n)
+
+    return {
+        "answer_latex": tex(dist),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "A1": tex_vec(A1),
+            "BD": tex_vec(D - B),
+            "BC1": tex_vec(C1 - B),
+            "n": tex_vec(n),
+            "n_simpl": tex_vec(n_simpl),
+            "dist": tex(dist),
+        },
+        "_exact": {"dist": dist},
+    }
+
+
+def solve_tri_pyramid_line_plane_angle(base_edge=2, height=2, scale=1.5):
+    """正三棱锥 P-ABC，求侧棱 PA 与底面 ABC 所成角的正弦值。"""
+    pts = regular_tri_pyramid(base_edge, height)
+    P, A, B, C = pts["P"], pts["A"], pts["B"], pts["C"]
+
+    PA = A - P
+    n = normal_from_points(A, B, C)
+    n_simpl = simplify_vec(n)
+    sin_theta = line_plane_angle_sin(PA, n)
+
+    return {
+        "answer_latex": tex(sin_theta),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "PA": tex_vec(PA),
+            "n": tex_vec(n),
+            "n_simpl": tex_vec(n_simpl),
+            "dot": tex(PA.dot(n_simpl)),
+            "norm_PA": tex(sp.simplify(PA.norm())),
+            "sin": tex(sin_theta),
+        },
+        "_exact": {"sin_theta": sin_theta},
+    }
+
+
+def solve_tetrahedron_dihedral(edge=None, scale=1.5):
+    """正四面体 ABCD，求二面角（沿任意棱）的余弦值。默认棱长 2√2。"""
+    if edge is None:
+        edge = 2 * sqrt(2)
+    pts = regular_tetrahedron(edge)
+    A, B, C, D = pts["A"], pts["B"], pts["C"], pts["D"]
+
+    cos_val = dihedral_cos(A, B, C, D)  # 二面角 C-AB-D
+
+    n1 = normal_from_points(A, B, C)
+    n2 = normal_from_points(A, B, D)
+    n1_s = simplify_vec(n1)
+    n2_s = simplify_vec(n2)
+
+    return {
+        "answer_latex": tex(cos_val),
+        "math_points": {k: tex_vec(v) for k, v in pts.items()},
+        "three_points": to_three(pts, scale=scale),
+        "vals": {
+            "AB": tex_vec(B - A),
+            "n1": tex_vec(n1),
+            "n2": tex_vec(n2),
+            "n1_simpl": tex_vec(n1_s),
+            "n2_simpl": tex_vec(n2_s),
+            "cos": tex(cos_val),
+        },
+        "_exact": {"cos_theta": cos_val},
+    }
+
+
 if __name__ == "__main__":
     sol = solve_pyramid_line_plane_angle()
     expected = 2 * sqrt(22) / 11
@@ -286,11 +454,11 @@ if __name__ == "__main__":
 
     print("\n--- 四类求解器自检 ---")
 
-    # 异面直线夹角：正方体中 A1C 与 AB（cos = √3/3）
+    # 异面直线夹角：正方体中 A1C 与 AD（cos = √3/3）
     cb = cube(1)
-    cos_ll = line_line_angle_cos(cb["C"] - cb["A1"], cb["B"] - cb["A"])
+    cos_ll = line_line_angle_cos(cb["C"] - cb["A1"], cb["D"] - cb["A"])
     ok_ll = sp.simplify(cos_ll - sqrt(3) / 3) == 0
-    print("异面直线 A1C·AB cos =", tex(cos_ll), "(期望 √3/3)", "通过" if ok_ll else "失败")
+    print("异面直线 A1C·AD cos =", tex(cos_ll), "(期望 √3/3)", "通过" if ok_ll else "失败")
     assert ok_ll
 
     # 点到平面距离：正方体 A1 到底面 ABCD（= 1）
@@ -315,4 +483,30 @@ if __name__ == "__main__":
     assert volume_box(2, 3, 4) == 24 and volume_pyramid(4, 3) == 4
     print("体积 box(2,3,4)=24, pyramid(4,3)=4 通过")
 
-    print("\n全部自检通过 ✅")
+    print("\n--- 新增 5 题型自检 ---")
+
+    # 1. 异面直线夹角：正方体 A1C 与 AD（cos = √3/3）
+    s1 = solve_cube_skew_lines_angle()
+    ok1 = sp.simplify(s1["_exact"]["cos_theta"] - sqrt(3) / 3) == 0
+    print("1. 正方体异面直线 A1C·AD cos =", s1["answer_latex"], "通过" if ok1 else "失败")
+    assert ok1
+
+    # 2. 正四棱锥侧面二面角
+    s2 = solve_pyramid_dihedral()
+    print("2. 正四棱锥侧面二面角 cos =", s2["answer_latex"])
+
+    # 3. 正方体 A1 到对角面 BDC1 距离
+    s3 = solve_cube_point_plane_distance()
+    print("3. 正方体 A1→BDC1 距离 =", s3["answer_latex"])
+
+    # 4. 正三棱锥线面角
+    s4 = solve_tri_pyramid_line_plane_angle()
+    print("4. 正三棱锥 PA-底面 sin =", s4["answer_latex"])
+
+    # 5. 正四面体二面角
+    s5 = solve_tetrahedron_dihedral()
+    ok5 = sp.simplify(s5["_exact"]["cos_theta"] - sp.Rational(1, 3)) == 0
+    print("5. 正四面体二面角 cos =", s5["answer_latex"], "通过" if ok5 else "失败")
+    assert ok5
+
+    print("\nall checks passed")

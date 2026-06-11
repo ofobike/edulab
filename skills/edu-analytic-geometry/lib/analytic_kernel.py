@@ -199,10 +199,10 @@ if __name__ == "__main__":
           " closed:", rg['lo_closed'], rg['hi_closed'])
     assert rg['lo_f'] == -3.0 and abs(rg['hi_f'] - 1.75) < 1e-12, "旗舰范围应为 [-3, 7/4]"
     assert rg['lo_closed'] and rg['hi_closed'], "两端均应闭（水平线取到 -3，竖直线取到 7/4）"
-    print("\n✅ 旗舰自检通过：MA·MB ∈", rg['latex'])
+    print("\nflagship check passed: MA·MB in", rg['latex'])
 
-    # 弦长（过焦点）范围自检：椭圆通径 2b²/a=3 为最短，长轴 2a=4 为最长
+    # chord length range check: latus rectum 2b^2/a=3 shortest, major axis 2a=4 longest
     cl2, _ = chord_len_sq_expr(E, (1, 0))
     rgc = range_over_m(cl2, horizontal_valid=True)
-    print("弦长² 范围:", rgc['latex'], "→ 弦长 ∈ [",
+    print("chord^2 range:", rgc['latex'], "-> chord in [",
           sp.sqrt(rgc['lo']), ",", sp.sqrt(rgc['hi']), "]")

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>函数与导数 · 交互解题</title>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#f8fafc;color:#1e293b;height:100vh;overflow:hidden}
+.wrap{display:grid;grid-template-columns:320px 1fr 360px;height:100vh}
+.console{background:#fff;border-right:1px solid #e2e8f0;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.canvas-wrap{position:relative;background:#f1f5f9;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.steps{background:#fff;border-left:1px solid #e2e8f0;padding:20px;overflow-y:auto}
+.step{margin-bottom:16px;padding:12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0}
+.step.active{border-color:#6366f1;background:#eef2ff}
+.step h3{font-size:14px;font-weight:600;color:#4f46e5;margin-bottom:6px}
+.step .content{font-size:13px;line-height:1.7;color:#334155}
+.slider-group{background:#f8fafc;border-radius:8px;padding:12px}
+.slider-group label{font-size:13px;font-weight:600;color:#475569;display:block;margin-bottom:6px}
+.slider-group input[type=range]{width:100%;accent-color:#6366f1}
+.slider-val{text-align:center;font-size:14px;font-weight:700;color:#4f46e5;margin-top:4px}
+.readout{background:#f8fafc;border-radius:8px;padding:10px;font-size:13px}
+.readout .label{color:#64748b;font-size:12px;margin-bottom:2px}
+.readout .value{font-weight:600;color:#1e293b}
+.readout.highlight{background:#eef2ff;border:1px solid #c7d2fe}
+.range-bar{background:#f8fafc;border-radius:8px;padding:12px}
+.range-bar .bar{height:8px;background:#e2e8f0;border-radius:4px;position:relative;margin:8px 0}
+.range-bar .fill{height:100%;background:#6366f1;border-radius:4px;position:absolute}
+.range-bar .pointer{width:12px;height:12px;background:#4f46e5;border-radius:50%;position:absolute;top:-2px;transform:translateX(-50%)}
+.range-bar .labels{display:flex;justify-content:space-between;font-size:11px;color:#64748b}
+.constant-indicator{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:12px;text-align:center}
+.constant-indicator .val{font-size:18px;font-weight:700;color:#059669}
+.answer-card{background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1px solid #c7d2fe;border-radius:12px;padding:16px;text-align:center}
+.answer-card .label{font-size:13px;color:#4f46e5;font-weight:600;margin-bottom:4px}
+.answer-card .value{font-size:18px;font-weight:700;color:#3730a3}
+.title-bar{background:#4f46e5;color:#fff;padding:16px 20px;font-size:16px;font-weight:700}
+.problem-text{font-size:14px;line-height:1.8;color:#334155;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="console" id="console"></div>
+  <div class="canvas-wrap"><canvas id="board"></canvas></div>
+  <div class="steps" id="steps"></div>
+</div>
+<script id="lesson-data" type="application/json">__LESSON_DATA__</script>
+<script>
+"use strict";
+const DATA=JSON.parse(document.getElementById("lesson-data").textContent);
+const BOARD=DATA.board||{};
+const LESSON=DATA.lesson||{};
+const STEPS=DATA.steps||[];
+
+// ---- Color palette ----
+const COLORS={
+  curve:"#4f46e5",curve2:"#0891b2",curve3:"#059669",
+  line:"#e11d48",line2:"#7c3aed",
+  point:"#1e293b",ptA:"#dc2626",ptB:"#2563eb",ptC:"#059669",
+  given:"#d97706",fixed:"#7c3aed",trace:"#8b5cf6",
+  area:"rgba(99,102,241,0.15)",aux:"#94a3b8",
+  vecA:"#dc2626",vecB:"#2563eb",
+  grid:"#e2e8f0",axis:"#64748b",text:"#334155",
+  emphasis:"#4f46e5",normal:"#0891b2",
+};
+
+// ---- Expression evaluator ----
+const _fnCache={};
+function evalExpr(expr,env){
+  const key=expr+"|"+Object.keys(env).sort().join(",");
+  if(!_fnCache[key]){
+    const params=Object.keys(env).sort();
+    try{_fnCache[key]=new Function(...params,"\"use strict\";return("+expr+")")}
+    catch(e){_fnCache[key]=()=>NaN}
+  }
+  try{
+    const vals=Object.keys(env).sort().map(k=>env[k]);
+    const r=_fnCache[key](...vals);
+    return typeof r==="number"&&isFinite(r)?r:NaN
+  }catch(e){return NaN}
+}
+
+// ---- Canvas setup ----
+const canvas=document.getElementById("board");
+const ctx=canvas.getContext("2d");
+let W,H,vx0,vy0,scaleX,scaleY;
+const view=BOARD.view||{xRange:[-6,6],yRange:[-4,4]};
+
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  canvas.width=r.width*devicePixelRatio;
+  canvas.height=r.height*devicePixelRatio;
+  canvas.style.width=r.width+"px";
+  canvas.style.height=r.height+"px";
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  W=r.width;H=r.height;
+  const xSpan=view.xRange[1]-view.xRange[0];
+  const ySpan=view.yRange[1]-view.yRange[0];
+  scaleX=W/xSpan;scaleY=H/ySpan;
+  vx0=view.xRange[0];vy0=view.yRange[1];
+}
+function toScreen(x,y){return[(x-vx0)*scaleX,(vy0-y)*scaleY]}
+function toMath(sx,sy){return[vx0+sx/scaleX,vy0-sy/scaleY]}
+
+// ---- Drawing helpers ----
+function drawGrid(){
+  ctx.strokeStyle=COLORS.grid;ctx.lineWidth=0.5;
+  const x0=Math.ceil(view.xRange[0]),x1=Math.floor(view.xRange[1]);
+  const y0=Math.ceil(view.yRange[0]),y1=Math.floor(view.yRange[1]);
+  for(let x=x0;x<=x1;x++){const[sx]=toScreen(x,0);ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,H);ctx.stroke()}
+  for(let y=y0;y<=y1;y++){const[,sy]=toScreen(0,y);ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(W,sy);ctx.stroke()}
+}
+function drawAxes(){
+  ctx.strokeStyle=COLORS.axis;ctx.lineWidth=1.5;
+  const[ax]=toScreen(0,0);const[,ay]=toScreen(0,0);
+  ctx.beginPath();ctx.moveTo(0,ay);ctx.lineTo(W,ay);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(ax,0);ctx.lineTo(ax,H);ctx.stroke();
+  // tick labels
+  ctx.fillStyle=COLORS.text;ctx.font="11px system-ui";ctx.textAlign="center";
+  const x0=Math.ceil(view.xRange[0]),x1=Math.floor(view.xRange[1]);
+  for(let x=x0;x<=x1;x++){if(x===0)continue;const[sx,sy]=toScreen(x,0);ctx.fillText(x,sx,sy+14)}
+  ctx.textAlign="right";
+  const y0=Math.ceil(view.yRange[0]),y1=Math.floor(view.yRange[1]);
+  for(let y=y0;y<=y1;y++){if(y===0)continue;const[sx,sy]=toScreen(0,y);ctx.fillText(y,sx-6,sy+4)}
+}
+
+// ---- Param environment ----
+let curParam=BOARD.param?BOARD.param.value:0;
+function paramEnv(){
+  const e={};
+  if(BOARD.param)e[BOARD.param.name]=curParam;
+  // alias p
+  if(BOARD.param)e.p=curParam;
+  return e;
+}
+
+// ---- Evaluate scalars ----
+function evalScalars(env){
+  const out={...env};
+  if(BOARD.scalars)for(const s of BOARD.scalars){
+    out[s.name]=evalExpr(s.expr,out);
+  }
+  return out;
+}
+
+// ---- Sample function ----
+function sampleFunction(fn,env,samples=300){
+  const[x0,x1]=fn.domain||view.xRange;
+  const pts=[];
+  const step=(x1-x0)/samples;
+  for(let i=0;i<=samples;i++){
+    const x=x0+i*step;
+    const y=evalExpr(fn.expr,{...env,x});
+    if(isFinite(y))pts.push([x,y]);
+  }
+  return pts;
+}
+
+// ---- Draw function curve ----
+function drawFunction(pts,color,lineWidth=2){
+  if(pts.length<2)return;
+  ctx.strokeStyle=color;ctx.lineWidth=lineWidth;ctx.beginPath();
+  let started=false;
+  for(const[x,y]of pts){
+    const[sx,sy]=toScreen(x,y);
+    if(!started){ctx.moveTo(sx,sy);started=true}
+    else ctx.lineTo(sx,sy);
+  }
+  ctx.stroke();
+}
+
+// ---- Draw point ----
+function drawPoint(p,name){
+  const[sx,sy]=toScreen(p.x,p.y);
+  const color=COLORS[p.color]||COLORS.point;
+  const r=p.emphasis?6:4;
+  ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);
+  ctx.fillStyle=color;ctx.fill();
+  if(p.label){
+    ctx.fillStyle=color;ctx.font="bold 12px system-ui";
+    ctx.textAlign="left";ctx.fillText(p.label,sx+8,sy-8);
+  }
+}
+
+// ---- Draw tangent line ----
+function drawTangent(x0,env,fn,color){
+  const h=0.0001;
+  const y0=evalExpr(fn.expr,{...env,x:x0});
+  const yp=evalExpr(fn.expr,{...env,x:x0+h});
+  const ym=evalExpr(fn.expr,{...env,x:x0-h});
+  if(!isFinite(y0)||!isFinite(yp)||!isFinite(ym))return;
+  const slope=(yp-ym)/(2*h);
+  // draw line through (x0,y0) with slope, extending to view edges
+  const[xl,xr]=view.xRange;
+  const yl=y0+slope*(xl-x0);
+  const yr=y0+slope*(xr-x0);
+  ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash([6,4]);
+  ctx.beginPath();
+  const[sx1,sy1]=toScreen(xl,yl);
+  const[sx2,sy2]=toScreen(xr,yr);
+  ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);
+  ctx.stroke();ctx.setLineDash([]);
+}
+
+// ---- Find zeros (bisection) ----
+function findZero(fn,env,a,b,tol=1e-8){
+  let fa=evalExpr(fn.expr,{...env,x:a});
+  let fb=evalExpr(fn.expr,{...env,x:b});
+  if(fa*fb>0)return null;
+  for(let i=0;i<100;i++){
+    const mid=(a+b)/2;
+    const fm=evalExpr(fn.expr,{...env,x:mid});
+    if(Math.abs(fm)<tol||Math.abs(b-a)<tol)return mid;
+    if(fa*fm<0){b=mid;fb=fm}else{a=mid;fa=fm}
+  }
+  return(a+b)/2;
+}
+
+// ---- Find extremum (golden section for now, derivative-based later) ----
+function findExtremum(fn,env,a,b,type="min"){
+  const golden=0.6180339887;
+  let c=a+(b-a)*(1-golden),d=a+(b-a)*golden;
+  for(let i=0;i<100;i++){
+    const fc=evalExpr(fn.expr,{...env,x:c});
+    const fd=evalExpr(fn.expr,{...env,x:d});
+    if(type==="min"){if(fc<fd)b=d;else a=c}
+    else{if(fc>fd)b=d;else a=c}
+    c=a+(b-a)*(1-golden);d=a+(b-a)*golden;
+  }
+  return(a+b)/2;
+}
+
+// ---- Build scene ----
+function buildScene(){
+  const env=evalScalars(paramEnv());
+  const scene={functions:[],points:[],tangents:[],zeros:[],extrema:[],segments:[],areas:[],traces:[]};
+  // functions
+  if(BOARD.functions)for(const fn of BOARD.functions){
+    scene.functions.push({pts:sampleFunction(fn,env),color:COLORS[fn.color]||fn.color||COLORS.curve,label:fn.label,lineWidth:fn.lineWidth||2});
+  }
+  // points
+  if(BOARD.points)for(const[name,p]of Object.entries(BOARD.points)){
+    let x,y,color,label,emphasis;
+    if(Array.isArray(p)){x=p[0];y=p[1];color="point"}
+    else{x=Array.isArray(p.xy)?p.xy[0]:p.x;y=Array.isArray(p.xy)?p.xy[1]:p.y;color=p.color||"point";label=p.label;emphasis=p.emphasis}
+    // evaluate expressions
+    if(typeof x==="string")x=evalExpr(x,env);
+    if(typeof y==="string")y=evalExpr(y,env);
+    if(!isFinite(x)||!isFinite(y))continue;
+    scene.points.push({name,x,y,color,label:label||name,emphasis});
+  }
+  // derived
+  if(BOARD.derived)for(const d of BOARD.derived){
+    if(d.type==="tangent_at_x"){
+      const x0=typeof d.x==="string"?evalExpr(d.x,env):d.x;
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn&&isFinite(x0))scene.tangents.push({x0,color:COLORS[d.color]||COLORS.line,fn});
+    }
+    if(d.type==="zero"){
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn){
+        const[d0,d1]=d.domain||view.xRange;
+        const z=findZero(fn,env,d0,d1);
+        if(z!==null)scene.zeros.push({x:z,y:0,color:COLORS[d.color]||COLORS.ptA,label:d.label||"zero"});
+      }
+    }
+    if(d.type==="extremum"){
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn){
+        const[d0,d1]=d.domain||view.xRange;
+        const xm=findExtremum(fn,env,d0,d1,d.kind||"min");
+        const ym=evalExpr(fn.expr,{...env,x:xm});
+        if(isFinite(ym))scene.extrema.push({x:xm,y:ym,color:COLORS[d.color]||COLORS.ptB,label:d.label||"extremum"});
+      }
+    }
+    if(d.type==="segment"){
+      const pa=scene.points.find(p=>p.name===d.a);
+      const pb=scene.points.find(p=>p.name===d.b);
+      if(pa&&pb)scene.segments.push({x1:pa.x,y1:pa.y,x2:pb.x,y2:pb.y,color:COLORS[d.color]||COLORS.aux,dashed:d.dashed});
+    }
+    if(d.type==="integral_area"){
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn){
+        const[a0,a1]=d.domain||[0,1];
+        const pts=sampleFunction({expr:fn.expr,domain:[a0,a1]},env,100);
+        scene.areas.push({pts,color:d.color||COLORS.area});
+      }
+    }
+  }
+  // trace
+  if(BOARD.trace){
+    const tracePts=[];
+    const pName=BOARD.trace.of;
+    const param=BOARD.param;
+    if(param){
+      const origVal=curParam;
+      const samples=BOARD.trace.samples||200;
+      const step=(param.max-param.min)/samples;
+      for(let i=0;i<=samples;i++){
+        curParam=param.min+i*step;
+        const tEnv=evalScalars(paramEnv());
+        // find the point in points
+        const pDef=BOARD.points&&BOARD.points[pName];
+        if(pDef){
+          let x=Array.isArray(pDef.xy)?pDef.xy[0]:(pDef.x||0);
+          let y=Array.isArray(pDef.xy)?pDef.xy[1]:(pDef.y||0);
+          if(typeof x==="string")x=evalExpr(x,tEnv);
+          if(typeof y==="string")y=evalExpr(y,tEnv);
+          if(isFinite(x)&&isFinite(y))tracePts.push([x,y]);
+        }
+      }
+      curParam=origVal;
+    }
+    scene.traces.push({pts:tracePts,color:COLORS[BOARD.trace.color]||COLORS.trace});
+  }
+  return scene;
+}
+
+// ---- Draw scene ----
+function drawScene(scene){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();drawAxes();
+  // areas
+  for(const a of scene.areas){
+    if(a.pts.length<2)continue;
+    ctx.fillStyle=a.color;ctx.beginPath();
+    const[sx0,sy0]=toScreen(a.pts[0][0],0);
+    ctx.moveTo(sx0,sy0);
+    for(const[x,y]of a.pts){const[sx,sy]=toScreen(x,y);ctx.lineTo(sx,sy)}
+    const[sx1]=toScreen(a.pts[a.pts.length-1][0],0);
+    ctx.lineTo(sx1,toScreen(0,0)[1]);ctx.closePath();ctx.fill();
+  }
+  // traces
+  for(const t of scene.traces)drawFunction(t.pts,t.color,1.5);
+  // functions
+  for(const fn of scene.functions)drawFunction(fn.pts,fn.color,fn.lineWidth);
+  // segments
+  for(const s of scene.segments){
+    ctx.strokeStyle=s.color;ctx.lineWidth=1.5;
+    if(s.dashed)ctx.setLineDash([6,4]);
+    ctx.beginPath();
+    const[x1,y1]=toScreen(s.x1,s.y1);const[x2,y2]=toScreen(s.x2,s.y2);
+    ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // tangents
+  for(const t of scene.tangents)drawTangent(t.x0,paramEnv(),t.fn,t.color);
+  // points
+  for(const p of scene.points)drawPoint(p,p.label);
+  // zeros
+  for(const z of scene.zeros){
+    const[sx,sy]=toScreen(z.x,z.y);
+    ctx.beginPath();ctx.arc(sx,sy,5,0,Math.PI*2);
+    ctx.fillStyle=z.color;ctx.fill();
+    ctx.fillStyle=z.color;ctx.font="bold 11px system-ui";
+    ctx.textAlign="center";ctx.fillText(z.label,sx,sy+18);
+  }
+  // extrema
+  for(const e of scene.extrema){
+    const[sx,sy]=toScreen(e.x,e.y);
+    ctx.beginPath();ctx.arc(sx,sy,5,0,Math.PI*2);
+    ctx.fillStyle=e.color;ctx.fill();
+    ctx.fillStyle=e.color;ctx.font="bold 11px system-ui";
+    ctx.textAlign="center";ctx.fillText(e.label,sx,sy-12);
+  }
+  // function labels
+  for(const fn of scene.functions){
+    if(!fn.label)continue;
+    const pts=fn.pts;
+    if(!pts.length)continue;
+    const last=pts[pts.length-1];
+    const[sx,sy]=toScreen(last[0],last[1]);
+    ctx.fillStyle=fn.color;ctx.font="bold 12px system-ui";
+    ctx.textAlign="left";ctx.fillText(fn.label,sx+6,sy-6);
+  }
+}
+
+// ---- Compute readouts ----
+function computeReadouts(){
+  const env=evalScalars(paramEnv());
+  const out=[];
+  if(BOARD.readouts)for(const r of BOARD.readouts){
+    let val="";
+    if(r.type==="f_value"){
+      const x=typeof r.x==="string"?evalExpr(r.x,env):r.x;
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn){const y=evalExpr(fn.expr,{...env,x});val=isFinite(y)?y.toFixed(r.digits||4):"---"}
+    }else if(r.type==="derivative_value"){
+      const x=typeof r.x==="string"?evalExpr(r.x,env):r.x;
+      const fn=BOARD.functions&&BOARD.functions[0];
+      if(fn){
+        const h=0.0001;
+        const yp=evalExpr(fn.expr,{...env,x:x+h});
+        const ym=evalExpr(fn.expr,{...env,x:x-h});
+        const d=(yp-ym)/(2*h);
+        val=isFinite(d)?d.toFixed(r.digits||4):"---"
+      }
+    }else if(r.type==="coord"){
+      const p=scene_pts_cache.find(p=>p.name===r.of);
+      if(p)val=`(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
+    }else if(r.type==="expr"){
+      val=evalExpr(r.expr,env);
+      if(isFinite(val))val=val.toFixed(r.digits!==undefined?r.digits:2);
+      else val="---";
+    }else if(r.type==="status"){
+      const v=evalExpr(r.expr,env);
+      const ok=r.op==="<="?v<=r.rhs:r.op===">="?v>=r.rhs:r.op==="=="?Math.abs(v-r.rhs)<1e-6:false;
+      val=ok?(r.okText||"true"):(r.badText||"false");
+      out.push({id:r.id,label:r.label,value:val,highlight:r.highlight,isStatus:true,statusOk:ok});
+      continue;
+    }
+    out.push({id:r.id,label:r.label,value:val,highlight:r.highlight});
+  }
+  return out;
+}
+let scene_pts_cache=[];
+
+// ---- Range bar ----
+function updateRangeBar(){
+  if(!BOARD.rangeBar)return;
+  const rb=BOARD.rangeBar;
+  const env=evalScalars(paramEnv());
+  // compute current value
+  let curVal=NaN;
+  if(rb.of){
+    // find the readout value
+    const ros=computeReadouts();
+    const ro=ros.find(r=>r.id===rb.of);
+    if(ro)curVal=parseFloat(ro.value);
+  }
+  const barEl=document.getElementById("range-bar-fill");
+  const ptrEl=document.getElementById("range-bar-pointer");
+  const lblEl=document.getElementById("range-bar-label");
+  if(!barEl)return;
+  const range=rb.max-rb.min;
+  if(range<=0)return;
+  const pct=Math.max(0,Math.min(100,((curVal-rb.min)/range)*100));
+  barEl.style.width=pct+"%";
+  ptrEl.style.left=pct+"%";
+  if(lblEl)lblEl.textContent=rb.label||"";
+}
+
+// ---- Constant indicator ----
+function updateConstant(){
+  if(!BOARD.constant)return;
+  const el=document.getElementById("constant-val");
+  if(!el)return;
+  el.textContent=BOARD.constant.label||"";
+}
+
+// ---- Build UI ----
+function buildConsole(){
+  const el=document.getElementById("console");
+  let html="";
+  // title
+  html+=`<div class="title-bar">${LESSON.title||"函数与导数"}</div>`;
+  // problem
+  if(LESSON.problem)html+=`<div class="problem-text">${LESSON.problem}</div>`;
+  // answer card
+  if(LESSON.answer)html+=`<div class="answer-card"><div class="label">${LESSON.answerLabel||"答案"}</div><div class="value">${LESSON.answer}</div></div>`;
+  // slider
+  if(BOARD.param){
+    const p=BOARD.param;
+    html+=`<div class="slider-group">
+      <label>${p.label||p.name}</label>
+      <input type="range" id="slider" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.value}">
+      <div class="slider-val" id="slider-val">${p.value}${p.unit||""}</div>
+    </div>`;
+  }
+  // readouts
+  if(BOARD.readouts){
+    for(const r of BOARD.readouts){
+      html+=`<div class="readout${r.highlight?" highlight":""}" id="ro-${r.id}"><div class="label">${r.label||""}</div><div class="value" id="rov-${r.id}">---</div></div>`;
+    }
+  }
+  // range bar
+  if(BOARD.rangeBar){
+    html+=`<div class="range-bar">
+      <div style="font-size:13px;font-weight:600;color:#475569">${BOARD.rangeBar.label||""}</div>
+      <div class="bar"><div class="fill" id="range-bar-fill" style="width:50%"></div><div class="pointer" id="range-bar-pointer" style="left:50%"></div></div>
+      <div class="labels"><span>${BOARD.rangeBar.min}</span><span id="range-bar-label"></span><span>${BOARD.rangeBar.max}</span></div>
+    </div>`;
+  }
+  // constant
+  if(BOARD.constant){
+    html+=`<div class="constant-indicator"><div style="font-size:12px;color:#059669">定值</div><div class="val" id="constant-val">${BOARD.constant.label||""}</div></div>`;
+  }
+  // answer band
+  if(BOARD.answerBand){
+    const ab=BOARD.answerBand;
+    html+=`<div style="background:#f8fafc;border-radius:8px;padding:12px">
+      <div style="font-size:13px;font-weight:600;color:#475569">${ab.label||"答案区间"}</div>
+      <div style="height:24px;background:#e2e8f0;border-radius:4px;position:relative;margin:8px 0">
+        <div style="height:100%;background:#6366f1;border-radius:4px;position:absolute;left:${((ab.lo-ab.min)/(ab.max-ab.min))*100}%;right:${(1-(ab.hi-ab.min)/(ab.max-ab.min))*100}%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b"><span>${ab.min}</span><span>${ab.max}</span></div>
+    </div>`;
+  }
+  el.innerHTML=html;
+  // slider event
+  const slider=document.getElementById("slider");
+  if(slider){
+    slider.addEventListener("input",()=>{
+      curParam=parseFloat(slider.value);
+      document.getElementById("slider-val").textContent=curParam+(BOARD.param.unit||"");
+      update();
+    });
+  }
+}
+
+function buildSteps(){
+  const el=document.getElementById("steps");
+  let html="";
+  for(let i=0;i<STEPS.length;i++){
+    const s=STEPS[i];
+    html+=`<div class="step${i===0?" active":""}" id="step-${i}"><h3>${s.title||""}</h3><div class="content">${s.content||""}</div></div>`;
+  }
+  el.innerHTML=html;
+  // KaTeX render
+  renderMathInElement(el);
+}
+
+// ---- KaTeX auto-render ----
+function renderMathInElement(el){
+  if(typeof katex==="undefined")return;
+  // find all $...$ and $$...$$
+  const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+  const textNodes=[];
+  while(walker.nextNode())textNodes.push(walker.currentNode);
+  for(const node of textNodes){
+    const text=node.textContent;
+    if(!text.includes("$"))continue;
+    const parts=text.split(/(\$\$[\s\S]*?\$\$|\$[^$]+?\$)/g);
+    if(parts.length<=1)continue;
+    const frag=document.createDocumentFragment();
+    for(const part ofparts){
+      if(part.startsWith("$$")&&part.endsWith("$$")){
+        const span=document.createElement("div");
+        span.className="katex-display";span.style.textAlign="center";span.style.margin="8px 0";
+        try{katex.render(part.slice(2,-2),span,{displayMode:true,throwOnError:false})}
+        catch(e){span.textContent=part}
+        frag.appendChild(span);
+      }else if(part.startsWith("$")&&part.endsWith("$")){
+        const span=document.createElement("span");
+        try{katex.render(part.slice(1,-1),span,{displayMode:false,throwOnError:false})}
+        catch(e){span.textContent=part}
+        frag.appendChild(span);
+      }else{
+        frag.appendChild(document.createTextNode(part));
+      }
+    }
+    node.parentNode.replaceChild(frag,node);
+  }
+}
+
+// ---- Update ----
+function update(){
+  const scene=buildScene();
+  scene_pts_cache=scene.points;
+  drawScene(scene);
+  // update readouts
+  const ros=computeReadouts();
+  for(const r of ros){
+    const el=document.getElementById("rov-"+r.id);
+    if(el){
+      el.textContent=typeof r.value==="number"?r.value.toFixed(4):r.value;
+      if(r.isStatus){
+        el.style.color=r.statusOk?"#059669":"#dc2626";
+      }
+    }
+  }
+  updateRangeBar();
+  updateConstant();
+}
+
+// ---- Init ----
+window.addEventListener("resize",()=>{resize();update()});
+resize();
+buildConsole();
+buildSteps();
+update();
+</script>
+</body>
+</html>

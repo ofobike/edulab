@@ -1,7 +1,7 @@
 {
   "name": "edulab",
-  "version": "0.1.0",
-  "description": "教育类技能集合：把学科问题转成可交互的教学网页。edu-solid-geometry 立体几何解题（建系+向量法，3D Three.js + MathJax）；edu-analytic-geometry 解析几何/圆锥曲线解题（sympy 精确计算 + 实时交互 2D 画板 + KaTeX）。",
+  "version": "0.2.0",
+  "description": "教育类技能集合：把学科问题转成可交互的教学网页。覆盖高中数学 8 大板块——立体几何（3D Three.js）、解析几何/圆锥曲线（2D Canvas）、函数与导数、三角函数、直线与圆、平面向量、不等式/线性规划、数列、概率统计。统一由 sympy 精确计算驱动，支持文字/图片/随机三种入口。",
   "author": {
     "name": "WY"
   }

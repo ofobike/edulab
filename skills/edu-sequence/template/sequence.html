@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数列 · 交互解题</title>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#f8fafc;color:#1e293b;height:100vh;overflow:hidden}
+.wrap{display:grid;grid-template-columns:320px 1fr 360px;height:100vh}
+.console{background:#fff;border-right:1px solid #e2e8f0;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.canvas-wrap{position:relative;background:#f1f5f9;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.steps{background:#fff;border-left:1px solid #e2e8f0;padding:20px;overflow-y:auto}
+.step{margin-bottom:16px;padding:12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0}
+.step h3{font-size:14px;font-weight:600;color:#4f46e5;margin-bottom:6px}
+.step .content{font-size:13px;line-height:1.7;color:#334155}
+.slider-group{background:#f8fafc;border-radius:8px;padding:12px}
+.slider-group label{font-size:13px;font-weight:600;color:#475569;display:block;margin-bottom:6px}
+.slider-group input[type=range]{width:100%;accent-color:#6366f1}
+.slider-val{text-align:center;font-size:14px;font-weight:700;color:#4f46e5;margin-top:4px}
+.readout{background:#f8fafc;border-radius:8px;padding:10px;font-size:13px}
+.readout .label{color:#64748b;font-size:12px;margin-bottom:2px}
+.readout .value{font-weight:600;color:#1e293b}
+.readout.highlight{background:#eef2ff;border:1px solid #c7d2fe}
+.answer-card{background:linear-gradient(135deg,#eef2ff,#e0e7ff);border:1px solid #c7d2fe;border-radius:12px;padding:16px;text-align:center}
+.answer-card .label{font-size:13px;color:#4f46e5;font-weight:600;margin-bottom:4px}
+.answer-card .value{font-size:18px;font-weight:700;color:#3730a3}
+.title-bar{background:#4f46e5;color:#fff;padding:16px 20px;font-size:16px;font-weight:700}
+.problem-text{font-size:14px;line-height:1.8;color:#334155;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="console" id="console"></div>
+  <div class="canvas-wrap"><canvas id="board"></canvas></div>
+  <div class="steps" id="steps"></div>
+</div>
+<script id="lesson-data" type="application/json">__LESSON_DATA__</script>
+<script>
+"use strict";
+const DATA=JSON.parse(document.getElementById("lesson-data").textContent);
+const BOARD=DATA.board||{};
+const LESSON=DATA.lesson||{};
+const STEPS=DATA.steps||[];
+
+const COLORS={bar:"#4f46e5",bar2:"#0891b2",point:"#1e293b",grid:"#e2e8f0",axis:"#64748b",text:"#334155"};
+
+const canvas=document.getElementById("board");
+const ctx=canvas.getContext("2d");
+let W,H;
+
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  canvas.width=r.width*devicePixelRatio;
+  canvas.height=r.height*devicePixelRatio;
+  canvas.style.width=r.width+"px";
+  canvas.style.height=r.height+"px";
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  W=r.width;H=r.height;
+}
+
+// ---- Expression evaluator ----
+const _fnCache={};
+function evalExpr(expr,env){
+  const key=expr+"|"+Object.keys(env).sort().join(",");
+  if(!_fnCache[key]){
+    const params=Object.keys(env).sort();
+    try{_fnCache[key]=new Function(...params,"\"use strict\";return("+expr+")")}
+    catch(e){_fnCache[key]=()=>NaN}
+  }
+  try{
+    const vals=Object.keys(env).sort().map(k=>env[k]);
+    const r=_fnCache[key](...vals);
+    return typeof r==="number"&&isFinite(r)?r:NaN
+  }catch(e){return NaN}
+}
+
+let curParam=BOARD.param?BOARD.param.value:0;
+
+function buildScene(){
+  const env={};
+  if(BOARD.param)env[BOARD.param.name]=curParam;
+  // compute sequence terms
+  const seq=BOARD.sequence;
+  if(!seq)return{bars:[],points:[]};
+  const n=BOARD.param?Math.round(curParam):10;
+  const bars=[];
+  for(let i=1;i<=n;i++){
+    const val=evalExpr(seq.expr,{...env,n:i});
+    if(isFinite(val))bars.push({index:i,value:val});
+  }
+  // cumulative sum
+  const cumBars=[];
+  let sum=0;
+  for(const b of bars){sum+=b.value;cumBars.push({index:b.index,value:sum})}
+  return{bars,cumBars,env};
+}
+
+function drawScene(scene){
+  ctx.clearRect(0,0,W,H);
+  const{bars,cumBars}=scene;
+  if(!bars.length)return;
+  const n=bars.length;
+  const maxVal=Math.max(...bars.map(b=>Math.abs(b.value)),...cumBars.map(b=>Math.abs(b.value)),1);
+  const padding={top:40,right:40,bottom:60,left:60};
+  const chartW=W-padding.left-padding.right;
+  const chartH=H-padding.top-padding.bottom;
+  const barW=Math.max(8,chartW/n*0.7);
+  const gap=chartW/n;
+  const scaleY=chartH/(2*maxVal);
+  const centerY=padding.top+chartH/2;
+
+  // axes
+  ctx.strokeStyle=COLORS.axis;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(padding.left,centerY);ctx.lineTo(W-padding.right,centerY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(padding.left,padding.top);ctx.lineTo(padding.left,H-padding.bottom);ctx.stroke();
+
+  // bars
+  for(const b of bars){
+    const x=padding.left+(b.index-0.5)*gap;
+    const h=b.value*scaleY;
+    ctx.fillStyle=COLORS.bar;ctx.globalAlpha=0.7;
+    ctx.fillRect(x-barW/2,centerY-h,barW,Math.abs(h));
+    ctx.globalAlpha=1;
+    // label
+    ctx.fillStyle=COLORS.text;ctx.font="10px system-ui";ctx.textAlign="center";
+    ctx.fillText(b.index,x,H-padding.bottom+14);
+  }
+
+  // cumulative line
+  ctx.strokeStyle=COLORS.bar2;ctx.lineWidth=2;ctx.beginPath();
+  let started=false;
+  for(const b of cumBars){
+    const x=padding.left+(b.index-0.5)*gap;
+    const y=centerY-b.value*scaleY;
+    if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // value labels
+  ctx.fillStyle=COLORS.text;ctx.font="bold 11px system-ui";ctx.textAlign="center";
+  for(const b of bars){
+    const x=padding.left+(b.index-0.5)*gap;
+    const y=centerY-b.value*scaleY-8;
+    ctx.fillText(b.value.toFixed(1),x,y-8);
+  }
+
+  // axis labels
+  ctx.fillStyle=COLORS.text;ctx.font="12px system-ui";ctx.textAlign="center";
+  ctx.fillText("n",W/2,H-10);
+  ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.fillText("a_n",0,0);ctx.restore();
+}
+
+function buildConsole(){
+  const el=document.getElementById("console");
+  let html="";
+  html+=`<div class="title-bar">${LESSON.title||"数列"}</div>`;
+  if(LESSON.problem)html+=`<div class="problem-text">${LESSON.problem}</div>`;
+  if(LESSON.answer)html+=`<div class="answer-card"><div class="label">${LESSON.answerLabel||"答案"}</div><div class="value">${LESSON.answer}</div></div>`;
+  if(BOARD.param){
+    const p=BOARD.param;
+    html+=`<div class="slider-group"><label>${p.label||p.name}</label>
+      <input type="range" id="slider" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.value}">
+      <div class="slider-val" id="slider-val">${p.value}${p.unit||""}</div></div>`;
+  }
+  if(BOARD.readouts){
+    for(const r of BOARD.readouts){
+      html+=`<div class="readout${r.highlight?" highlight":""}" id="ro-${r.id}"><div class="label">${r.label||""}</div><div class="value" id="rov-${r.id}">---</div></div>`;
+    }
+  }
+  el.innerHTML=html;
+  const slider=document.getElementById("slider");
+  if(slider)slider.addEventListener("input",()=>{
+    curParam=parseFloat(slider.value);
+    document.getElementById("slider-val").textContent=Math.round(curParam)+(BOARD.param.unit||"");
+    update();
+  });
+}
+
+function buildSteps(){
+  const el=document.getElementById("steps");
+  let html="";
+  for(let i=0;i<STEPS.length;i++){
+    html+=`<div class="step" id="step-${i}"><h3>${STEPS[i].title||""}</h3><div class="content">${STEPS[i].content||""}</div></div>`;
+  }
+  el.innerHTML=html;
+  if(typeof katex!=="undefined"){
+    const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+    const nodes=[];while(w.nextNode())nodes.push(w.currentNode);
+    for(const node of nodes){
+      const t=node.textContent;if(!t.includes("$"))continue;
+      const parts=t.split(/(\$\$[\s\S]*?\$\$|\$[^$]+?\$)/g);
+      if(parts.length<=1)continue;
+      const frag=document.createDocumentFragment();
+      for(const p of parts){
+        if(p.startsWith("$$")&&p.endsWith("$$")){const s=document.createElement("div");s.style.textAlign="center";s.style.margin="8px 0";try{katex.render(p.slice(2,-2),s,{displayMode:true,throwOnError:false})}catch(e){s.textContent=p};frag.appendChild(s)}
+        else if(p.startsWith("$")&&p.endsWith("$")){const s=document.createElement("span");try{katex.render(p.slice(1,-1),s,{throwOnError:false})}catch(e){s.textContent=p};frag.appendChild(s)}
+        else frag.appendChild(document.createTextNode(p));
+      }
+      node.parentNode.replaceChild(frag,node);
+    }
+  }
+}
+
+function update(){
+  const scene=buildScene();
+  drawScene(scene);
+  if(BOARD.readouts){
+    const env={};if(BOARD.param)env[BOARD.param.name]=curParam;
+    for(const r of BOARD.readouts){
+      const el=document.getElementById("rov-"+r.id);
+      if(!el)continue;
+      if(r.type==="expr"){
+        const v=evalExpr(r.expr,env);
+        el.textContent=isFinite(v)?v.toFixed(r.digits||2):"---";
+      }
+    }
+  }
+}
+
+window.addEventListener("resize",()=>{resize();update()});
+resize();buildConsole();buildSteps();update();
+</script>
+</body>
+</html>
